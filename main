@@ -1,0 +1,183 @@
+import heapq
+import numpy.random
+numpy.random.seed(314)
+# TODO: new event is veranderen van rate poisson
+# alle tijd in seconden
+morning_peak_time = 3600*2, 3600*4  # 9 tot 11
+evening_peak_time = 3600*16, 3600*18  # 16 tot 18
+
+class Halte():
+    def __init__(self, name, count, all_day, morning_peak, evening_peak):
+        self.name = name  # name in string
+        self.count = count  # count st the next station is count + 1
+        self.all_day = all_day  # expected number of passengers during the day
+        self.morning_peak = morning_peak  # expected number of passengers during morning peak
+        self.evening_peak = evening_peak  # idem.
+        self.next_stop = self
+        self.previous_stop = self
+        self.distance_to_next_halte = 0
+        self.available_at = 0
+        self.schedule = []
+        self.schedule_index = 0
+
+    def __str__(self):
+        return str(self.name)
+
+    def dwelling_time(self, tijd):
+        # TODO: Realistische data hier
+        if morning_peak_time[0] < tijd < morning_peak_time[1]:
+            return _dwell_time(self.morning_peak[0]//32, self.morning_peak[1]//32, self.morning_peak[2]//32)
+        if evening_peak_time[0] < tijd < evening_peak_time[1]:
+            return _dwell_time(self.evening_peak[0]//32, self.evening_peak[1]//32, self.evening_peak[2]//32)
+        return _dwell_time(self.all_day[0]//100, self.all_day[1]//100, self.all_day[2]//100)
+
+def load_passenger_times():
+    g = open("reistijd.data")
+    reistijd = []
+    for i in g:
+        i = i.split(';')
+        reistijd.append((i[0], int(i[1])))
+    f = open("data")
+    haltes = []
+    count = 0
+    for line in f:
+        line = line.split(',')
+        if count >= 9:
+            line[0] += " terug"
+        name = line[0]
+        all_day = float(line[1]), float(line[2]), float(line[3])
+        morning_peak = float(line[4]), float(line[5]), float(line[6])
+        evening_peak = float(line[7]), float(line[8]), float(line[9])
+        new_halte = Halte(name, count, all_day, morning_peak, evening_peak)
+        if len(haltes) > 0:
+            haltes[-1].next_stop = new_halte
+            new_halte.previous_stop = haltes[-1]
+
+        haltes.append(new_halte)
+        count += 1
+    for i in range(16):
+        if i < 8:
+            haltes[i].distance_to_next_halte = reistijd[i][1]
+        else:
+            haltes[i+1].distance_to_next_halte = reistijd[i][1]
+    return haltes
+
+
+def _dwell_time(staying_passengers, entering_passengers, leaving_passengers, testfase=False):
+    if testfase:
+        return 1
+    #print(staying_passengers, entering_passengers, leaving_passengers)
+    first_formula = 2.3 * 10 ** (-5) * staying_passengers ** 2 * (entering_passengers + leaving_passengers)
+    second_formula = (12.5 + 0.22 * entering_passengers + 0.13 * leaving_passengers)
+    d = max(first_formula, second_formula)  # Taking d as the max is just one way to do it
+    result = max(numpy.random.gamma(2, d / 2), 0.8 * d)
+    return d
+
+
+class Tram:
+    def __init__(self, location, count, end_time):
+        self.identifier = count
+        self.passengers = 0
+        self.total_delay = 0
+        self.location = location
+        self.current_location = None
+        self.next_location = None
+        self.previous_location = None
+        self.end_time = end_time
+
+    def __str__(self):
+        return str(self.identifier)
+
+
+class Event:
+    def __init__(self, tram, halte, tijd):
+        self.tram = tram
+        self.halte = halte
+        self.tijd = tijd
+
+    def __lt__(self, other):
+        return self.tijd <= other.tijd
+
+    def __gt__(self, other):
+        return self.tijd > other.tijd
+
+    def __str__(self):
+        return "Tijd: " + str(self.tijd) + " tram: " + str(self.tram) + " halte: " + str(self.halte)
+
+
+def event_handler(event, queue):
+    # TODO: dwelltime implementeren
+    # TODO: reistijd goed implementeren
+
+    # check of halte wel beschikbaar is
+    if event.halte.available_at <= event.tijd:
+        dwell_tijd = event.halte.dwelling_time(event.tijd)
+        reistijd = event.halte.distance_to_next_halte
+        event.halte.available_at = event.tijd + dwell_tijd + reistijd
+        if event.halte.name == "P+R Uithof terug" and event.tram.end_time <= event.tijd:
+            return queue
+        event.tram.halte = event.halte
+        new_event = Event(event.tram, event.halte.next_stop, event.tijd + reistijd + dwell_tijd)
+    else:
+        # dit is vertraging
+        new_event = Event(event.tram, event.halte, event.halte.available_at)
+        event.tram.total_delay += event.halte.available_at - event.tijd
+    heapq.heappush(queue, new_event)
+    return queue
+
+
+def create_schedule():
+    # TODO: schema goedmaken
+    q = []
+    amount_of_trams1 = 3  # buiten spits
+    amount_of_trams2 = 9  # exta in de spits
+    haltes = load_passenger_times()
+    beginpunt = haltes[0]
+    frequency = 16
+    # alle starttijden per uur
+    for starttijd in range(0, 3600, int(3600/frequency)):
+        for uur in range(20):
+            haltes[0].schedule.append(3600*uur + starttijd)
+        haltes[0].schedule.sort()
+    for halte in haltes:
+        average_dwell_time = 10
+        halte.next_stop.schedule = [i + halte.distance_to_next_halte + average_dwell_time for i in halte.schedule]
+    for halte in haltes:
+        print(halte.name, halte.schedule)
+    haltes[-1].next_stop = haltes[0]
+    haltes[0].previous_stop = haltes[-1]
+    starttijd2 = 3600*2  # om 9
+    eindtijd1 = 3600*14.5  # tot 21:30
+    eindtijd2 = 3600*11  # tot 18:00
+    distance_between_trams_in_time = 3600/frequency
+    trams = []
+    for i in range(amount_of_trams1 + amount_of_trams2):
+        if i % 4 == 0:
+            new_tram = Tram(beginpunt, i, eindtijd1)
+            new_event = Event(new_tram, beginpunt, distance_between_trams_in_time*i)
+            heapq.heappush(q, new_event)
+        else:
+            new_tram = Tram(beginpunt, i, eindtijd2)
+            new_event = Event(new_tram, beginpunt, starttijd2 + distance_between_trams_in_time*i)
+            heapq.heappush(q, new_event)
+        trams.append(new_tram)
+    return trams, haltes, q
+
+
+def main():
+    trams, haltes, q = create_schedule()
+    while len(q) > 0:
+        #print("next")
+       # for i in q:
+        #    print(i)
+        next_event = heapq.heappop(q)
+        print(next_event)
+        q = event_handler(next_event, q)
+        #input()
+    total_delay = 0
+    for tram in trams:
+        total_delay += tram.total_delay
+    print(total_delay)
+    print("einde")
+
+main()
