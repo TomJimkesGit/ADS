@@ -48,6 +48,7 @@ def processPassengers():
             else:
                 averages[key].append(0) #if there were no passengers in this segment any of the days
 
+
     outputFile = open("processeddata/12bproc.csv", 'w')
 
     #write headers
