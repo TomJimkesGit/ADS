@@ -15,13 +15,40 @@ class passengerDist:
     #same goes here for the indices of passenger counts
     passengersB = {}
 
+    #the references for ids
+    idRefs = {
+        "P+R Uithof": 0,
+        "WKZ": 1,
+        "UMC": 2,
+        "Heidelberglaan": 3,
+        "Padualaan": 4,
+        "Kromme Rijn": 5,
+        "Galgenwaard": 6,
+        "Vaartscherijn": 7,
+        "Centraal Station Centrumzijde": 8
+    }
+
     lastArrivalsA = ["6:00"] * 9
 
     lastArrivalsB = ["6:00"] * 9
 
     def __init__(self): {}
 
-    def createFromTestFile(self, file): {}
+    def createFromTestFile(self, csvFile):
+        #Do use segments of 15 minutes to make programming easier
+        self.testData = True
+
+        file = open(csvFile)
+        # init passenger dics
+        self.passengersA = {"6:00": [0] * 9, "7:00": [0] * 9, "9:00": [0] * 9, "16:00": [0] * 9, "18:00": [0] * 9}
+        self.passengersB = {"6:00": [0] * 9, "7:00": [0] * 9, "9:00": [0] * 9, "16:00": [0] * 9, "18:00": [0] * 9}
+
+        for line in file:
+            sp = line.split(";")
+            if sp[1] == "0":
+                self.passengersA[str(sp[2]) + ":00"][self.idRefs[sp[0]]] = int(float(sp[4]))
+            elif sp[1] == "1":
+                self.passengersB[str(sp[2]) + ":00"][self.idRefs[sp[0]]] = (float(sp[4]))
 
     #The empirical data instance requires two files
     def createFromEmpiricalData(self, fileA, fileB):
@@ -67,10 +94,6 @@ class passengerDist:
 
         boardingPassengers = 0
 
-        print(lastTime)
-        print(lastTimeSegment)
-        print(timeSegment)
-
         #if the time segments are equal, the result is simple
         if(lastTimeSegment == timeSegment):
             remainderCur = self.remainder(lastTimeHours, lastTimeMinutes, hours, minutes)
@@ -87,14 +110,37 @@ class passengerDist:
         return boardingPassengers
 
     #returns the number of passengers
+    #if samples is set to -1, we take samples for each discrete step in the timesegment
     def getPassengers(self, samples, timeSegment, stationId, direction):
+
+        print(samples)
+
         # set the correct dict to obtain passenger information
         passengersRef = self.passengersB
         if (direction == 0):
             passengersRef = self.passengersA
 
         #average arrivals per minute
-        lambd = (passengersRef[timeSegment][stationId] / 15) #NOT STATIC!!!!
+        denominator = 15
+
+        #if the testdata is used, the denominator depends on the segment (the amanount of minutes in the segment
+        if self.testData:
+            if timeSegment == "6:00":
+                denominator = 60
+            elif timeSegment == "7:00":
+                denominator = 120
+            elif timeSegment == "9:00":
+                denominator = 4200
+            elif timeSegment == "16:00":
+                denominator = 120
+            else:
+                denominator = 210
+
+        #take samples for each discrete step
+        if samples == -1:
+            samples = denominator
+
+        lambd = (passengersRef[timeSegment][stationId] / denominator)
         return sum(list(numpy.random.poisson(lambd, samples)))
 
     #time 0 is 6:00
@@ -122,7 +168,7 @@ class passengerDist:
         else :
             remMinutes = minutes2 + (60 - minutes)
 
-        return [hours, minutes]
+        return [remHours, remMinutes]
 
     def spreadSegments(self, lastHours, lastMinutes, lastSegment, hours, minutes, segment, stationId, direction):
         # set the correct dict to obtain passenger information
@@ -140,17 +186,20 @@ class passengerDist:
         boardingPassengers = self.getPassengers(remainderCur[0] * 60 + remainderCur[1], segment, stationId, direction)
         boardingPassengers += self.getPassengers(remainderLast[0] * 60 + remainderLast[1], lastSegment, stationId,direction)
 
+        print(boardingPassengers)
+
         #we need to draw from segments inbetween the indices and add these totals to the global total
         for index in range(startIndex + 1, endIndex):
-            boardingPassengers += self.getPassengers(15, list(passengersRef)[index], stationId, direction)
+            boardingPassengers += self.getPassengers(-1, list(passengersRef)[index], stationId, direction)
 
         return boardingPassengers
 
-#asd = passengerDist()
+asd = passengerDist()
 #asd.createFromEmpiricalData("processeddata/12a.csv", "processeddata/12b.csv")
+asd.createFromTestFile("testdata/input-data-passengers-01.csv")
 
-#print(asd.passengersA["7:15"])
-#print(asd.passengersA[list(asd.passengersA)[5]])
-#passe = asd.boarding(36000, 8, 1)
-#print(asd.lastArrivalsA, asd.lastArrivalsB)
-#print(passe)
+
+passe = asd.boarding(3500, 3, 0)
+print(asd.lastArrivalsA, asd.lastArrivalsB)
+print(passe)
+
