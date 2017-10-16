@@ -148,6 +148,19 @@ class passengerDist:
 
     #PRIVATE FUNCTIONS
 
+    # n.o. samples to be taken from a certain distribution
+    # hours2 and minutes2 are later
+    # returns a tuple
+    def remainder(self, hours, minutes, hours2, minutes2):
+        remHours = hours2 - hours
+
+        if (hours == hours2):
+            remMinutes = minutes2 - minutes
+        else:
+            remMinutes = minutes2 + (60 - minutes)
+
+        return [remHours, remMinutes]
+
     #get the ratios for disembarking passengers
     def getDisembarkingRatios(self, disem, direction):
         if direction == 0:
@@ -257,8 +270,8 @@ class passengerDist:
 
 
 asd = passengerDist()
-asd.createFromEmpiricalData("processeddata/12a.csv", "processeddata/12b.csv")
-#asd.createFromTestFile("testdata/input-data-passengers-01.csv")
+#asd.createFromEmpiricalData("processeddata/12a.csv", "processeddata/12b.csv")
+asd.createFromTestFile("testdata/input-data-passengers-01.csv")
 
 
 passe = asd.embarkingPassengers(55800, 3, 0)
