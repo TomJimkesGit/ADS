@@ -140,7 +140,20 @@ class passengerDist:
         return boardingPassengers
 
     #Returns a PERCENTAGE of passengers that will disembark
-    def disembarkingPassengers(self, hours, minutes, stationId, direction):
+    def disembarkingPassengers(self, seconds, stationId, direction):
+        hours = math.floor(seconds / 3600)
+        minutes = math.floor((seconds - hours * 3600) / 60)
+        hours += 6
+
+        # If there is a remainder of more than half a minute, we add it to the minutes/hours
+        if seconds % 60 > 30:
+            if minutes < 59:
+                minutes += 1
+            else:
+                minutes = 0
+                hours += 1
+
+
         timeSegment = self.disembarkingTimeSegment(hours, minutes)
         dicRef = self.disembarkingA if direction == 0 else self.disembarkingB
         return dicRef[stationId][timeSegment]
